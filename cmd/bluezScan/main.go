@@ -27,11 +27,7 @@ func main() {
 		addr := device.Address.String()
 
 		for _, sd := range device.ServiceData() {
-			if sd.UUID.String() != bthomeUUID.String() {
-				continue
-			}
-
-			packets, err := parser.Parse(addr, bthome.BTHomeUUID[:], sd.Data)
+			packets, err := parser.Parse(addr, nil, sd.Data)
 			if err != nil {
 				log.Printf("[%s] error: %v\n", addr, err)
 				continue

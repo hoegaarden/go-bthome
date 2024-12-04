@@ -45,7 +45,9 @@ var BTHomeUUID = [...]byte{0xD2, 0xFC}
 // If the address is not empty, duplicate packets (with the same BTHome packet
 // ID) will be ignored.
 // Service data must be pairs of UUID and raw service data. If any of UUIDs is
-// not a BTHome UUID, it will be ignored.
+// not a BTHome UUID, it will be ignored. If the UUD is nil, it will be treated
+// as if it was a BTHome UUID, this might be useful if the ServiceData has
+// already been filtered for BTHome and we don't need to check for that again.
 func (p *Parser) Parse(address string, serviceData ...[]byte) ([]Packet, error) {
 	l := len(serviceData)
 	if l%2 != 0 {
@@ -57,7 +59,7 @@ func (p *Parser) Parse(address string, serviceData ...[]byte) ([]Packet, error) 
 	for i := 0; i < l; i += 2 {
 		uuid, data := serviceData[i], serviceData[i+1]
 
-		if !isBTHome(uuid) {
+		if uuid != nil && !isBTHome(uuid) {
 			continue
 		}
 
