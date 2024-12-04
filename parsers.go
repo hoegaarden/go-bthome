@@ -83,6 +83,23 @@ var objectParsers = []ObjectParser{
 		Byte:   0xf2,
 		Parser: firmwareVersionParser(3),
 	},
+	{
+		Byte: 0x54,
+		Parser: func(r binstruct.Reader, packet *Packet) error {
+			l, err := r.ReadUint8()
+			if err != nil {
+				return fmt.Errorf("reading length of Raw: %w", err)
+			}
+			lr, b, err := r.ReadBytes(int(l))
+			if err != nil {
+				return fmt.Errorf("reading %d bytes for Raw: %w", l, err)
+			}
+			if lr != int(l) {
+				return fmt.Errorf("reading %d bytes for Raw, only got %d bytes", l, lr)
+			}
+			return appendTo(&packet.Raw, b)
+		},
+	},
 }
 
 func firmwareVersionParser(length int) ObjectParserFunc {

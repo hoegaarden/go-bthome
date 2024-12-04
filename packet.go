@@ -14,6 +14,7 @@ type Packet struct {
 	Battery     []uint8
 	Humidity    []uint8
 	Temperature []float32
+	Raw         [][]byte
 	Button      []Button
 }
 
@@ -36,6 +37,9 @@ func (p Packet) String() string {
 	}
 	if len(p.Temperature) > 0 {
 		s += fmt.Sprintf(", Temperature: %0.2f", p.Temperature)
+	}
+	if len(p.Raw) > 0 {
+		s += fmt.Sprintf(", Raw: %x", p.Raw)
 	}
 	if len(p.Button) > 0 {
 		s += fmt.Sprintf(", Button: %v", p.Button)
