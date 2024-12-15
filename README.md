@@ -9,10 +9,22 @@ communication, e.g. [go-ble].
 
 ## Status
 
-- incomplete:
-  - I only implemented what I needed for my sensors
-  - Encryption is not implemented at all
+- incomplete: I only implemented what I needed for my sensors
 - PoC: This is just a quick & dirty PoC, use at your on risk
+
+
+## Encryption
+
+Encrypted packets can be read, the decryption [as documented][crypt] has been implemented.
+
+For Shelly devices you can use the [Shelly BLE Debug Android app][bleApp] to
+encrypt your sensor. The sensor will then be provisioned with a random
+encryption key. After encryption you can "Read" the device and can find the key
+in `settings.encryptionKey`, this should be a 32 character string (16 byte hex
+encoded). This key can then be used with this parser by adding it and the
+sensor's MAC via the `AddEncryptionKey` method.
+
+Encryption for one sensor is implemented in the [cmd/bluezScan][exampleBluez].
 
 
 ## Examples
@@ -40,6 +52,8 @@ and implements a similar tool as the example above:
 2024/11/02 11:31:20 scanning...
 2024/11/02 11:31:37 [7C:C6:B6:71:98:D7] BTHomePacket{Encrypted: false, Trigger: Button, BTHomeVersion: 2, ID: 119, Battery: [100], Humidity: [55], Temperature: [19.90]}
 2024/11/02 11:32:09 [7C:C6:B6:71:9D:B5] BTHomePacket{Encrypted: false, Trigger: Button, BTHomeVersion: 2, ID: 144, Battery: [100], Humidity: [56], Temperature: [20.10]}
+2024/11/02 11:32:11 [7C:C6:B6:76:58:CE] BTHomePacket{Encrypted: true, Trigger: Button, BTHomeVersion: 2, ID: 95, Battery: [100], Humidity: [54], Temperature: [21.20]}
+
 ^Csignal: interrupt
 : 
 ```
@@ -51,3 +65,5 @@ and implements a similar tool as the example above:
 [exampleBluez]: ./cmd/bluezScan/main.go
 [tgb]: https://github.com/tinygo-org/bluetooth
 [BlueZ]: https://www.bluez.org/
+[crypt]: https://bthome.io/encryption/
+[bleApp]: https://play.google.com/store/apps/details?id=cloud.shelly.bledebug&hl=en

@@ -2,16 +2,23 @@ package bthome
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 
 	"github.com/ghostiam/binstruct"
+	ccm "gitlab.com/go-extension/aes-ccm"
 )
 
 type Parser struct {
 	objectParsers map[byte]ObjectParserFunc
 	lastPacket    map[string]uint8
+	cipherBlocks  map[string]cipher.Block
 }
 
 // NewParser creates a new BTHome parser with the default object parsers
@@ -20,12 +27,33 @@ func NewParser() *Parser {
 	parser := &Parser{}
 
 	parser.lastPacket = map[string]uint8{}
+	parser.cipherBlocks = map[string]cipher.Block{}
 
 	for _, p := range objectParsers {
 		parser.RegisterObjectParser(p)
 	}
 
 	return parser
+}
+
+// AddEncryptionKey adds an encryption key for a specific address.
+func (p *Parser) AddEncryptionKey(address string, key string) error {
+	keyRaw, err := hex.DecodeString(key)
+	if err != nil {
+		return fmt.Errorf("decoding key: %w", err)
+	}
+
+	block, err := aes.NewCipher(keyRaw)
+	if err != nil {
+		return fmt.Errorf("creating AES cipher: %w", err)
+	}
+
+	if p.cipherBlocks == nil {
+		p.cipherBlocks = map[string]cipher.Block{}
+	}
+
+	p.cipherBlocks[strings.ToLower(address)] = block
+	return nil
 }
 
 // RegisterObjectParser registers an object parser, which parsers parts of the
@@ -63,9 +91,36 @@ func (p *Parser) Parse(address string, serviceData ...[]byte) ([]Packet, error) 
 			continue
 		}
 
-		packet, err := p.parseSingle(data)
+		packet := Packet{}
+		bytes := binstruct.NewReaderFromBytes(data, binary.LittleEndian, false)
+
+		header, err := bytes.ReadByte()
 		if err != nil {
-			return nil, fmt.Errorf("parsing packet: %w", err)
+			return nil, fmt.Errorf("reading header byte: %w", err)
+		}
+
+		packet.Encrypted = getBit(header, 0)
+		packet.Trigger = Trigger(getBit(header, 2))
+		packet.BTHomeVersion = header >> 5
+
+		if packet.Encrypted {
+			encryptedBlob, err := bytes.ReadAll()
+			if err != nil {
+				return nil, fmt.Errorf("reading encrypted data: %w", err)
+			}
+
+			decryptedData, err := p.decrypt(address, header, encryptedBlob)
+			if err != nil {
+				return nil, fmt.Errorf("decrypting packet: %w", err)
+			}
+
+			// replace the bytes reader with a reader holding the decrypted data
+			bytes = binstruct.NewReaderFromBytes(decryptedData, binary.LittleEndian, false)
+		}
+
+		err = p.parseData(bytes, &packet)
+		if err != nil {
+			return nil, fmt.Errorf("parsing packet data: %w", err)
 		}
 
 		if address != "" {
@@ -82,39 +137,70 @@ func (p *Parser) Parse(address string, serviceData ...[]byte) ([]Packet, error) 
 	return packets, nil
 }
 
-func (p *Parser) parseSingle(b []byte) (Packet, error) {
-	r := binstruct.NewReaderFromBytes(b, binary.LittleEndian, false)
-	packet := Packet{}
-
-	header, err := r.ReadByte()
-	if err != nil {
-		return packet, fmt.Errorf("reading header byte: %w", err)
-	}
-
-	packet.Encrypted = getBit(header, 0)
-	packet.Trigger = Trigger(getBit(header, 2))
-	packet.BTHomeVersion = header >> 5
-
+func (p *Parser) parseData(r binstruct.Reader, packet *Packet) error {
 	for {
 		objectID, err := r.ReadByte()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return packet, fmt.Errorf("reading next byte: %w", err)
+			return fmt.Errorf("reading next byte: %w", err)
 		}
 
 		op, ok := p.objectParsers[objectID]
 		if !ok {
-			return packet, fmt.Errorf("unknown object ID: %x", objectID)
+			return fmt.Errorf("unknown object ID: %x", objectID)
 		}
 
-		if err := op(r, &packet); err != nil {
-			return packet, fmt.Errorf("parsing object ID %x: %w", objectID, err)
+		if err := op(r, packet); err != nil {
+			return fmt.Errorf("parsing object ID %x: %w", objectID, err)
 		}
 	}
 
-	return packet, nil
+	return nil
+}
+
+func (p *Parser) decrypt(address string, header byte, encryptedBlob []byte) ([]byte, error) {
+	if address == "" {
+		return nil, fmt.Errorf("no address provided for decryption")
+	}
+
+	addrBytes, err := hex.DecodeString(strings.ReplaceAll(address, ":", ""))
+	if err != nil {
+		return nil, fmt.Errorf("decoding MAC address: %w", err)
+	}
+
+	// +--------------------------+-------------------+---------------+
+	// | Encrypted Data (n bytes) | Counter (4 bytes) | MIC (4 bytes) |
+	// +--------------------------+-------------------+---------------+
+
+	l := len(encryptedBlob)
+	encryptedData := encryptedBlob[:l-8]
+	counter := encryptedBlob[l-8 : l-4]
+	mic := encryptedBlob[l-4:]
+
+	// This could/should be used to check for replay attacks
+	// counter seems to be unix time (?)
+	// counterUint32 := binary.LittleEndian.Uint32(counterRaw)
+
+	block, ok := p.cipherBlocks[strings.ToLower(address)]
+	if !ok {
+		return nil, fmt.Errorf("no decryption cipher block for address %s", address)
+	}
+
+	nonce := slices.Concat(addrBytes, BTHomeUUID[:], []byte{header}, counter)
+
+	ccm, err := ccm.NewCCMWithSize(block, len(nonce), 4)
+	if err != nil {
+		return nil, fmt.Errorf("creating CCM: %w", err)
+	}
+
+	decryptedData, err := ccm.Open(nil, nonce, slices.Concat(encryptedData, mic), nil)
+	if err != nil {
+		return nil, fmt.Errorf("CCM open: %w", err)
+	}
+
+	return decryptedData, nil
 }
 
 func isBTHome(serviceDataUUID []byte) bool {

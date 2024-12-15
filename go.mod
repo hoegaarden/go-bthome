@@ -5,6 +5,7 @@ go 1.23.0
 require (
 	github.com/ghostiam/binstruct v1.4.0
 	github.com/go-ble/ble v0.0.0-20240122180141-8c5522f54333
+	gitlab.com/go-extension/aes-ccm v0.0.0-20230221065045-e58665ef23c7
 	tinygo.org/x/bluetooth v0.10.0
 )
 

@@ -17,9 +17,14 @@ func main() {
 	bthomeUUID := bluetooth.New16BitUUID(binary.LittleEndian.Uint16(bthome.BTHomeUUID[:]))
 	parser := bthome.NewParser()
 
+	err := parser.AddEncryptionKey("7C:C6:B6:76:58:CE", "A9BC33D24E55F1168C9A909939B51D50")
+	if err != nil {
+		panic(err)
+	}
+
 	// Start scanning.
 	log.Println("scanning...")
-	err := adapter.Scan(func(adapter *bluetooth.Adapter, device bluetooth.ScanResult) {
+	err = adapter.Scan(func(adapter *bluetooth.Adapter, device bluetooth.ScanResult) {
 		if !device.HasServiceUUID(bthomeUUID) {
 			return
 		}
