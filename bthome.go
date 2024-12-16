@@ -3,7 +3,6 @@ package bthome
 import (
 	"bytes"
 	"crypto/aes"
-	"crypto/cipher"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -12,22 +11,23 @@ import (
 	"strings"
 
 	"github.com/ghostiam/binstruct"
-	ccm "gitlab.com/go-extension/aes-ccm"
+	aes_ccm "gitlab.com/go-extension/aes-ccm"
 )
 
 type Parser struct {
 	objectParsers map[byte]ObjectParserFunc
 	lastPacket    map[string]uint8
-	cipherBlocks  map[string]cipher.Block
+	ccms          map[string]aes_ccm.CCM
 }
 
 // NewParser creates a new BTHome parser with the default object parsers
 // registered.
 func NewParser() *Parser {
-	parser := &Parser{}
-
-	parser.lastPacket = map[string]uint8{}
-	parser.cipherBlocks = map[string]cipher.Block{}
+	parser := &Parser{
+		lastPacket:    map[string]uint8{},
+		objectParsers: map[byte]ObjectParserFunc{},
+		ccms:          map[string]aes_ccm.CCM{},
+	}
 
 	for _, p := range objectParsers {
 		parser.RegisterObjectParser(p)
@@ -43,16 +43,22 @@ func (p *Parser) AddEncryptionKey(address string, key string) error {
 		return fmt.Errorf("decoding key: %w", err)
 	}
 
-	block, err := aes.NewCipher(keyRaw)
+	cipher, err := aes.NewCipher(keyRaw)
 	if err != nil {
 		return fmt.Errorf("creating AES cipher: %w", err)
 	}
 
-	if p.cipherBlocks == nil {
-		p.cipherBlocks = map[string]cipher.Block{}
+	// the sizes for the nonce and the tag are fixed
+	ccm, err := aes_ccm.NewCCMWithSize(cipher, 13, 4)
+	if err != nil {
+		return fmt.Errorf("creating CCM instance: %w", err)
 	}
 
-	p.cipherBlocks[strings.ToLower(address)] = block
+	if p.ccms == nil {
+		p.ccms = map[string]aes_ccm.CCM{}
+	}
+
+	p.ccms[strings.ToLower(address)] = ccm
 	return nil
 }
 
@@ -181,18 +187,13 @@ func (p *Parser) decrypt(address string, header byte, encryptedBlob []byte) ([]b
 
 	// This could/should be used to check for replay attacks
 	// counter seems to be unix time (?)
-	// counterUint32 := binary.LittleEndian.Uint32(counterRaw)
-
-	block, ok := p.cipherBlocks[strings.ToLower(address)]
-	if !ok {
-		return nil, fmt.Errorf("no decryption cipher block for address %s", address)
-	}
+	// counterUint32 := binary.LittleEndian.Uint32(counter)
 
 	nonce := slices.Concat(addrBytes, BTHomeUUID[:], []byte{header}, counter)
 
-	ccm, err := ccm.NewCCMWithSize(block, len(nonce), 4)
-	if err != nil {
-		return nil, fmt.Errorf("creating CCM: %w", err)
+	ccm, ok := p.ccms[strings.ToLower(address)]
+	if !ok {
+		return nil, fmt.Errorf("getting CCM for client %s", address)
 	}
 
 	decryptedData, err := ccm.Open(nil, nonce, slices.Concat(encryptedData, mic), nil)
