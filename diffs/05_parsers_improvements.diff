@@ -1,0 +1,119 @@
+--- a/parsers.go
++++ b/parsers.go
+@@ -7,8 +7,14 @@ import (
+ 	"github.com/ghostiam/binstruct"
+ )
+ 
++// ObjectParserFunc is a function that parses a specific object type from BTHome data.
+ type ObjectParserFunc func(reader binstruct.Reader, packet *Packet) error
+ 
++// ObjectParser represents a parser for a specific BTHome object type identified by a byte value.
+ type ObjectParser struct {
++	// Byte is the object type identifier as defined in the BTHome specification.
+ 	Byte   byte
++	// Parser is the function that parses this object type.
+ 	Parser ObjectParserFunc
+ }
+ 
+@@ -21,11 +27,11 @@ var objectParsers = []ObjectParser{
+ 			if err != nil {
+ 				return fmt.Errorf("reading uint8 for PacketID: %w", err)
+ 			}
+-			return setOnce(&packet.ID, val)
++			return setOnceValue(&packet.ID, val)
+ 		},
+ 	},
+ 	{
+ 		Byte: 0x01,
+ 		Parser: func(r binstruct.Reader, packet *Packet) error {
+ 			val, err := r.ReadUint8()
+ 			if err != nil {
+ 				return fmt.Errorf("reading uint8 for Battery: %w", err)
+ 			}
+-			return appendTo(&packet.Battery, val)
++			return setOncePointer(&packet.Battery, val)
+ 		},
+ 	},
+ 	{
+@@ -42,7 +48,7 @@ var objectParsers = []ObjectParser{
+ 			if err != nil {
+ 				return fmt.Errorf("reading uint8 for Humidity: %w", err)
+ 			}
+-			return appendTo(&packet.Humidity, val)
++			return setOncePointer(&packet.Humidity, val)
+ 		},
+ 	},
+ 	{
+@@ -52,7 +58,7 @@ var objectParsers = []ObjectParser{
+ 			if err != nil {
+ 				return fmt.Errorf("reading int16 for Temperature: %w", err)
+ 			}
+-			return appendTo(&packet.Temperature, 0.1*float32(val))
++			temp := 0.1 * float32(val)
++			return setOncePointer(&packet.Temperature, temp)
+ 		},
+ 	},
+ 	{
+@@ -62,7 +68,7 @@ var objectParsers = []ObjectParser{
+ 			if err != nil {
+ 				return fmt.Errorf("reading byte for Button: %w", err)
+ 			}
+-			return appendTo(&packet.Button, Button(val))
++			return appendTo(&packet.ButtonEvents, Button(val))
+ 		},
+ 	},
+ 	{
+@@ -72,7 +78,7 @@ var objectParsers = []ObjectParser{
+ 			if err != nil {
+ 				return fmt.Errorf("reading int16 for DeviceTypeID: %w", err)
+ 			}
+-			return setOnce(&packet.DeviceTypeID, &val)
++			return setOncePointer(&packet.DeviceTypeID, val)
+ 		},
+ 	},
+ 	{
+@@ -101,6 +107,7 @@ var objectParsers = []ObjectParser{
+ 	},
+ }
+ 
++// firmwareVersionParser creates a parser for firmware version with the specified length.
+ func firmwareVersionParser(length int) ObjectParserFunc {
+ 	return func(r binstruct.Reader, packet *Packet) error {
+ 		ver := ""
+@@ -115,22 +122,37 @@ func firmwareVersionParser(length int) ObjectParserFunc {
+ 			ver = strconv.Itoa(int(val)) + ver
+ 		}
+ 
+-		return setOnce(&packet.FirmwareVersion, &ver)
++		return setOncePointer(&packet.FirmwareVersion, ver)
+ 	}
+ }
+ 
++// appendTo appends a value to a slice.
+ func appendTo[T any](dest *[]T, val T) error {
+ 	*dest = append(*dest, val)
+ 	return nil
+ }
+ 
+-func setOnce[T comparable](dest *T, val T) error {
++// setOnceValue sets a value once, returning an error if already set.
++func setOnceValue[T comparable](dest *T, val T) error {
+ 	var zero T
+-
+ 	if *dest != zero {
+-		return fmt.Errorf("value already set")
++		return fmt.Errorf("value already set to %v, cannot set to %v", *dest, val)
+ 	}
+-
+ 	*dest = val
+ 	return nil
++}
++
++// setOncePointer sets a pointer value once, returning an error if already set.
++func setOncePointer[T any](dest **T, val T) error {
++	if *dest != nil {
++		return fmt.Errorf("value already set to %v, cannot set to %v", **dest, val)
++	}
++	*dest = &val
++	return nil
+ }

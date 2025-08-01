@@ -1,0 +1,37 @@
+--- a/cmd/readSensors/main.go
++++ b/cmd/readSensors/main.go
+@@ -2,6 +2,7 @@ package main
+ 
+ import (
+ 	"context"
++	"errors"
+ 	"flag"
+ 	"fmt"
+ 	"log"
+@@ -51,7 +52,13 @@ func toServiceDataPairs(serviceDatas []ble.ServiceData) [][]byte {
+ }
+ 
+ func advHandler() func(a ble.Advertisement) {
+-	parser := bthome.NewParser()
++	parser, err := bthome.NewParser()
++	if err != nil {
++		log.Fatalf("Failed to create parser: %v", err)
++	}
++	
++	// For backward compatibility, you could also use:
++	// parser := bthome.NewParserLegacy()
+ 
+ 	return func(a ble.Advertisement) {
+ 		addr := a.Addr().String()
+@@ -59,6 +66,11 @@ func advHandler() func(a ble.Advertisement) {
+ 		packets, err := parser.Parse(addr, toServiceDataPairs(a.ServiceData())...)
+ 		if err != nil {
++			// Handle specific errors more gracefully
++			if errors.Is(err, bthome.ErrInvalidServiceData) {
++				return // Skip invalid service data silently
++			}
+ 			log.Printf("[%s] Error: parsing advertisement: %v", addr, err)
++			return
+ 		}
+ 
+ 		for _, packet := range packets {

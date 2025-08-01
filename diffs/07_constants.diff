@@ -1,0 +1,22 @@
+--- a/constants.go
++++ b/constants.go
+@@ -0,0 +1,19 @@
++package bthome
++
++// BTHome packet parsing constants
++const (
++	// Bit positions in the header byte
++	encryptionBitPos = 0
++	triggerBitPos    = 2
++	versionShiftBits = 5
++	
++	// Encryption-related constants
++	nonceSize   = 13  // Size of the nonce for AES-CCM
++	tagSize     = 4   // Size of the authentication tag
++	micSize     = 4   // Size of the Message Integrity Check
++	counterSize = 4   // Size of the counter field
++	
++	// Packet validation constants
++	maxBatteryPercent = 100
++	maxHumidityPercent = 100
++)

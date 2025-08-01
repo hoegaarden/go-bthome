@@ -1,0 +1,102 @@
+--- a/packet.go
++++ b/packet.go
+@@ -1,23 +1,30 @@
+ package bthome
+ 
+-import "fmt"
++import (
++	"fmt"
++	"strings"
++)
+ 
++// Packet represents a parsed BTHome advertisement packet containing sensor data
++// and device information.
+ type Packet struct {
++	// Core packet information
+ 	Encrypted     bool
+ 	Trigger       Trigger
+ 	BTHomeVersion uint8
+ 	ID            uint8
+ 
++	// Device metadata (optional)
+ 	FirmwareVersion *string
+ 	DeviceTypeID    *int16
+ 
+-	Battery     []uint8
+-	Humidity    []uint8
+-	Temperature []float32
+-	Raw         [][]byte
+-	Button      []Button
++	// Sensor data - using pointers for optional singular values
++	Battery     *uint8       // Battery percentage (0-100)
++	Humidity    *uint8       // Relative humidity percentage (0-100)  
++	Temperature *float32     // Temperature in Celsius
++	Raw         [][]byte     // Raw data packets (can be multiple)
++	ButtonEvents []Button    // Button events (can be multiple)
+ }
+ 
++// String returns a human-readable representation of the packet.
+ func (p Packet) String() string {
+-	s := "BTHomePacket{"
++	var b strings.Builder
++	b.WriteString("BTHomePacket{")
+ 
+-	s += fmt.Sprintf("Encrypted: %t, Trigger: %s, BTHomeVersion: %d, ID: %d", p.Encrypted, p.Trigger, p.BTHomeVersion, p.ID)
++	fmt.Fprintf(&b, "Encrypted: %t, Trigger: %s, BTHomeVersion: %d, ID: %d", 
++		p.Encrypted, p.Trigger, p.BTHomeVersion, p.ID)
+ 
+ 	if p.FirmwareVersion != nil {
+-		s += fmt.Sprintf(", FirmwareVersion: %s", *p.FirmwareVersion)
++		fmt.Fprintf(&b, ", FirmwareVersion: %s", *p.FirmwareVersion)
+ 	}
+ 	if p.DeviceTypeID != nil {
+-		s += fmt.Sprintf(", DeviceTypeID: %d", *p.DeviceTypeID)
++		fmt.Fprintf(&b, ", DeviceTypeID: %d", *p.DeviceTypeID)
+ 	}
+-	if len(p.Battery) > 0 {
+-		s += fmt.Sprintf(", Battery: %d", p.Battery)
++	if p.Battery != nil {
++		fmt.Fprintf(&b, ", Battery: %d", *p.Battery)
+ 	}
+-	if len(p.Humidity) > 0 {
+-		s += fmt.Sprintf(", Humidity: %d", p.Humidity)
++	if p.Humidity != nil {
++		fmt.Fprintf(&b, ", Humidity: %d", *p.Humidity)
+ 	}
+-	if len(p.Temperature) > 0 {
+-		s += fmt.Sprintf(", Temperature: %0.2f", p.Temperature)
++	if p.Temperature != nil {
++		fmt.Fprintf(&b, ", Temperature: %.2f", *p.Temperature)
+ 	}
+ 	if len(p.Raw) > 0 {
+-		s += fmt.Sprintf(", Raw: %x", p.Raw)
++		fmt.Fprintf(&b, ", Raw: %x", p.Raw)
+ 	}
+-	if len(p.Button) > 0 {
+-		s += fmt.Sprintf(", Button: %v", p.Button)
++	if len(p.ButtonEvents) > 0 {
++		fmt.Fprintf(&b, ", ButtonEvents: %v", p.ButtonEvents)
+ 	}
+ 
+-	s += "}"
+-	return s
++	b.WriteString("}")
++	return b.String()
++}
++
++// IsValid checks if the packet contains valid data according to BTHome specification.
++func (p Packet) IsValid() error {
++	if p.BTHomeVersion < 1 || p.BTHomeVersion > 2 {
++		return fmt.Errorf("unsupported BTHome version: %d", p.BTHomeVersion)
++	}
++	
++	if p.Battery != nil && *p.Battery > 100 {
++		return fmt.Errorf("invalid battery percentage: %d", *p.Battery)
++	}
++	
++	if p.Humidity != nil && *p.Humidity > 100 {
++		return fmt.Errorf("invalid humidity percentage: %d", *p.Humidity)
++	}
++	
++	return nil
+ }

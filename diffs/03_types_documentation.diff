@@ -1,0 +1,49 @@
+--- a/types.go
++++ b/types.go
+@@ -2,8 +2,12 @@ package bthome
+ 
+ import "fmt"
+ 
++// Trigger indicates whether a BTHome packet was triggered by a button press or interval.
+ type Trigger bool
+ 
++// Trigger types defined by the BTHome specification.
+ const (
++	// TriggerByButton indicates the packet was triggered by a user button press.
+ 	TriggerByButton   Trigger = true
++	// TriggerByInterval indicates the packet was triggered by a periodic interval.
+ 	TriggerByInterval Trigger = false
+ )
+ 
+@@ -16,8 +20,18 @@ func (t Trigger) String() string {
+ 	return "Interval"
+ }
+ 
++// Button represents the type of button event that occurred on a BTHome device.
+ type Button byte
+ 
++// Button event types as defined by the BTHome specification.
+ const (
++	// ButtonNone indicates no button event.
+ 	ButtonNone            Button = 0x00
++	// ButtonPress indicates a single button press.
+ 	ButtonPress           Button = 0x01
++	// ButtonDoublePress indicates a double button press.
+ 	ButtonDoublePress     Button = 0x02
++	// ButtonTriplePress indicates a triple button press.
+ 	ButtonTriplePress     Button = 0x03
++	// ButtonLongPress indicates a long button press.
+ 	ButtonLongPress       Button = 0x04
++	// ButtonLongDoublePress indicates a long double button press.
+ 	ButtonLongDoublePress Button = 0x05
++	// ButtonLongTriplePress indicates a long triple button press.
+ 	ButtonLongTriplePress Button = 0x06
++	// ButtonHold indicates a button hold event.
+ 	ButtonHold            Button = 0x80
+ )
+ 
+@@ -51,4 +65,4 @@ func (b Button) String() string {
+ 	default:
+ 		return fmt.Sprintf("Unknown (%b)", b)
+ 	}
+-}

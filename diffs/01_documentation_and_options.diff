@@ -1,0 +1,81 @@
+--- a/bthome.go
++++ b/bthome.go
+@@ -14,6 +14,13 @@ import (
+ 	aes_ccm "gitlab.com/go-extension/aes-ccm"
+ )
+ 
++// Parser is a BTHome packet parser that can decode BTHome v2 format advertisements.
++// It supports both encrypted and unencrypted packets and maintains state for
++// duplicate packet detection.
++//
++// The parser is safe for concurrent use from multiple goroutines as long as
++// the same address is not used simultaneously across goroutines for parsing
++// (due to duplicate detection state).
+ type Parser struct {
+ 	objectParsers map[byte]ObjectParserFunc
+ 	lastPacket    map[string]uint8
+@@ -21,8 +28,28 @@ type Parser struct {
+ }
+ 
+ // NewParser creates a new BTHome parser with the default object parsers
+-// registered.
+-func NewParser() *Parser {
++// registered and applies any provided options.
++func NewParser(opts ...ParserOption) (*Parser, error) {
++	parser := &Parser{
++		lastPacket:    make(map[string]uint8),
++		objectParsers: make(map[byte]ObjectParserFunc),
++		ccms:          make(map[string]aes_ccm.CCM),
++	}
++
++	for _, p := range objectParsers {
++		parser.RegisterObjectParser(p)
++	}
++
++	for _, opt := range opts {
++		if err := opt(parser); err != nil {
++			return nil, fmt.Errorf("applying parser option: %w", err)
++		}
++	}
++
++	return parser, nil
++}
++
++func NewParserLegacy() *Parser {
+ 	parser := &Parser{
+ 		lastPacket:    map[string]uint8{},
+ 		objectParsers: map[byte]ObjectParserFunc{},
+@@ -37,6 +64,21 @@ func NewParser() *Parser {
+ 	return parser
+ }
+ 
++// ParserOption is a function that configures a Parser.
++type ParserOption func(*Parser) error
++
++// WithEncryptionKey configures the parser with an encryption key for a specific device.
++func WithEncryptionKey(address, key string) ParserOption {
++	return func(p *Parser) error {
++		return p.AddEncryptionKey(address, key)
++	}
++}
++
++// WithCustomObjectParser adds a custom object parser to the parser.
++func WithCustomObjectParser(op ObjectParser) ParserOption {
++	return func(p *Parser) error {
++		p.RegisterObjectParser(op)
++		return nil
++	}
++}
++
+ // AddEncryptionKey adds an encryption key for a specific address.
+ func (p *Parser) AddEncryptionKey(address string, key string) error {
+ 	keyRaw, err := hex.DecodeString(key)
+@@ -72,7 +114,9 @@ func (p *Parser) RegisterObjectParser(op ObjectParser) {
+ 	p.objectParsers[op.Byte] = op.Parser
+ }
+ 
+-// BTHomeUUID is the Service Data UUID of BTHome packets.
++// BTHomeUUID is the Service Data UUID used to identify BTHome packets in BLE advertisements.
++// This is the 16-bit UUID 0xFCD2 in little-endian format as specified by the BTHome
++// specification.
+ var BTHomeUUID = [...]byte{0xD2, 0xFC}

@@ -1,0 +1,20 @@
+--- a/interfaces.go
++++ b/interfaces.go
+@@ -0,0 +1,18 @@
++package bthome
++
++// PacketParser defines the interface for parsing BTHome packets.
++// This interface enables dependency injection and easier testing.
++type PacketParser interface {
++	// Parse parses advertisement data as BTHome packets.
++	Parse(address string, serviceData ...[]byte) ([]Packet, error)
++	
++	// AddEncryptionKey adds an encryption key for a specific device address.
++	AddEncryptionKey(address, key string) error
++	
++	// RegisterObjectParser registers a custom object parser.
++	RegisterObjectParser(op ObjectParser)
++}
++
++// Ensure Parser implements PacketParser interface.
++var _ PacketParser = (*Parser)(nil)

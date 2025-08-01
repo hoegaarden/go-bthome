@@ -1,0 +1,40 @@
+--- a/cmd/bluezScan/main.go
++++ b/cmd/bluezScan/main.go
+@@ -2,6 +2,7 @@ package main
+ 
+ import (
+ 	"encoding/binary"
++	"errors"
+ 	"log"
+ 
+ 	"github.com/hoegaarden/go-bthome"
+@@ -16,9 +17,15 @@ func main() {
+ 	must("enable BLE stack", adapter.Enable())
+ 
+ 	bthomeUUID := bluetooth.New16BitUUID(binary.LittleEndian.Uint16(bthome.BTHomeUUID[:]))
+-	parser := bthome.NewParser()
+ 
+-	err := parser.AddEncryptionKey("7C:C6:B6:76:58:CE", "A9BC33D24E55F1168C9A909939B51D50")
++	// Example using functional options pattern
++	parser, err := bthome.NewParser(
++		bthome.WithEncryptionKey("7C:C6:B6:76:58:CE", "A9BC33D24E55F1168C9A909939B51D50"),
++	)
++	if err != nil {
++		panic("Failed to create parser: " + err.Error())
++	}
++	
++	// Alternative: add encryption key after creation
+ 	if err != nil {
+ 		panic(err)
+ 	}
+@@ -35,6 +42,11 @@ func main() {
+ 		for _, sd := range device.ServiceData() {
+ 			packets, err := parser.Parse(addr, nil, sd.Data)
+ 			if err != nil {
++				// Handle specific errors
++				if errors.Is(err, bthome.ErrInvalidServiceData) {
++					continue // Skip invalid service data
++				}
+ 				log.Printf("[%s] error: %v\n", addr, err)
+ 				continue
+ 			}

@@ -1,0 +1,21 @@
+--- a/errors.go
++++ b/errors.go
+@@ -0,0 +1,17 @@
++package bthome
++
++import "errors"
++
++// Common errors that can be returned by the parser.
++var (
++	// ErrInvalidServiceData is returned when service data is not provided in pairs.
++	ErrInvalidServiceData = errors.New("service data must be pairs of UUID and data")
++	
++	// ErrNoEncryptionKey is returned when trying to decrypt a packet without a configured key.
++	ErrNoEncryptionKey = errors.New("no encryption key configured for device")
++	
++	// ErrUnknownObjectID is returned when encountering an unknown object ID during parsing.
++	ErrUnknownObjectID = errors.New("unknown object ID")
++	
++	// ErrInvalidPacketStructure is returned when the packet structure is malformed.
++	ErrInvalidPacketStructure = errors.New("invalid packet structure")
++)
